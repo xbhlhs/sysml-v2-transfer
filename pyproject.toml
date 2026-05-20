@@ -1,0 +1,17 @@
+[project]
+name = "sysml_v2_transfer"
+version = "0.1.0"
+description = "SysML v2 code and graphics bidirectional conversion toolkit"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9",
+    "rich>=13.0"
+]
+optional-dependencies = { gui = ["PySide6>=6.0.0"] }
+[project.urls]
+homepage = "https://example.com/sysml-v2-transfer"
+repository = "https://github.com/your-org/sysml-v2-transfer"
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
