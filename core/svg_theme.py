@@ -7,8 +7,8 @@ from dataclasses import dataclass
 class SVGTheme:
     canvas_width: int = 560
     canvas_min_height: int = 180
-    background_fill: str = "#f8fafc"
-    title_fill: str = "#0f172a"
+    background_fill: str = "#ffffff"
+    title_fill: str = "#111827"
     title_font_family: str = "Arial, sans-serif"
     title_font_size: int = 18
     node_font_family: str = "Arial, sans-serif"
@@ -18,11 +18,11 @@ class SVGTheme:
     package_font_size: int = 16
     relationship_font_size: int = 13
     node_fill: str = "#ffffff"
-    package_fill: str = "#bfdbfe"
+    package_fill: str = "#dbeafe"
     definition_fill: str = "#dcfce7"
     relationship_fill: str = "#f8fafc"
-    node_stroke: str = "#0f172a"
-    relationship_stroke: str = "#94a3b8"
+    node_stroke: str = "#1f2937"
+    relationship_stroke: str = "#64748b"
     node_stroke_width: float = 1.5
     package_stroke_width: float = 2
     relationship_stroke_width: float = 1.25

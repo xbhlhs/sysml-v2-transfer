@@ -30,9 +30,22 @@
 
 ### 安装
 
+普通安装：
+
 ```bash
 python -m pip install -e .
+```
+
+GUI 安装：
+
+```bash
 python -m pip install -e '.[gui]'
+```
+
+开发安装：
+
+```bash
+python -m pip install -e '.[dev]'
 ```
 
 ### 运行示例

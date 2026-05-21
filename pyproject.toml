@@ -8,7 +8,10 @@ dependencies = [
     "typer>=0.9",
     "rich>=13.0"
 ]
-optional-dependencies = { gui = ["PySide6>=6.0.0"] }
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.0.0"]
+dev = ["pytest>=8.0.0", "ruff>=0.6.0"]
 [project.urls]
 homepage = "https://github.com/xbhlhs/sysml-v2-transfer"
 repository = "https://github.com/xbhlhs/sysml-v2-transfer"

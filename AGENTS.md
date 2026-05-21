@@ -10,6 +10,7 @@
 ## Build, Test, and Development Commands
 - `python -m pip install -e .` installs the package in editable mode.
 - `python -m pip install -e '.[gui]'` adds the GUI dependency (`PySide6`).
+- `python -m pip install -e '.[dev]'` adds the development tools (`pytest`, `ruff`).
 - `python -m cli.main --help` shows the available CLI commands.
 - `python -m cli.main code-to-graphics <file>` converts SysML v2 text to graphics.
 - `python -m cli.main graphics-to-code <file>` converts graphics data back to SysML v2.
