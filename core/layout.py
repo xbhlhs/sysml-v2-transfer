@@ -37,18 +37,51 @@ def build_graphics_model(sysml_code: str) -> dict[str, Any]:
 
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
+
+    content_y = 48
+    package_seen = False
+
     for index, statement in enumerate(statements):
         kind = classify_statement(statement)
-        width = min(420, max(260, 16 + len(statement) * 8))
+        if kind == "package" and not package_seen:
+            width = 520
+            height = 76
+            x = 20
+            y = 48
+            content_y = 156
+            package_seen = True
+            display_label = extract_title([statement])
+        elif kind == "definition":
+            width = min(480, max(320, 18 + len(statement) * 8))
+            height = 64
+            x = 40
+            y = content_y
+            content_y += 96
+            display_label = statement
+        elif kind == "relationship":
+            width = min(440, max(300, 18 + len(statement) * 7))
+            height = 44
+            x = 72
+            y = content_y
+            content_y += 72
+            display_label = statement
+        else:
+            width = min(480, max(300, 18 + len(statement) * 8))
+            height = 56
+            x = 40
+            y = content_y
+            content_y += 88
+            display_label = statement
+
         nodes.append(
             {
                 "id": f"node-{index}",
-                "label": statement,
+                "label": display_label,
                 "kind": kind,
-                "x": 40,
-                "y": 40 + index * 100,
+                "x": x,
+                "y": y,
                 "width": width,
-                "height": 56,
+                "height": height,
             }
         )
         if index > 0:
@@ -67,4 +100,3 @@ def build_graphics_model(sysml_code: str) -> dict[str, Any]:
         "nodes": nodes,
         "edges": edges,
     }
-
