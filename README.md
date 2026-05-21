@@ -32,7 +32,7 @@
 
 ```bash
 python -m pip install -e .
-python -m pip install -e .[gui]
+python -m pip install -e '.[gui]'
 ```
 
 ### 运行示例
@@ -48,3 +48,12 @@ python -m cli.main gui
 - 先从 `core` 的 SysML v2 文本解析和图形模型序列化开始。
 - 以 `cli` 命令和 `gui` 视图为入口，逐步实现双向转换流程。
 - 维护 `tests/` 中的测试用例，确保转换逻辑稳定。
+
+## 版本规划
+
+本项目当前处于早期演进阶段，优先级大致如下：
+
+1. 先让 CLI 输出可直接打开的可视化结果
+2. 再让 GUI 复现同样的可视化流程
+3. 然后补齐最小 SysML v2 语义、视图与导航
+4. 再做可视化结果回写为 SysML v2 代码，形成 `1.0.0` 级别的最小闭环
