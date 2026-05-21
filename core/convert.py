@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from html import escape
+import xml.etree.ElementTree as ET
 from textwrap import wrap
 from typing import Any
 
@@ -95,15 +95,43 @@ def graphics_to_svg(graphics_model: dict[str, Any]) -> str:
     edges = graphics_model.get("edges", [])
     width = 560
     height = max(180, 100 + max(len(nodes), 1) * 100)
-    title = escape(str(graphics_model.get("title", "SysML v2 Transfer")))
+    title = str(graphics_model.get("title", "SysML v2 Transfer"))
 
     node_index = {node["id"]: node for node in nodes}
-    parts = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        '<rect x="0" y="0" width="100%" height="100%" fill="#f8fafc"/>',
-        f'<text x="24" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#0f172a">{title}</text>',
-    ]
+    svg = ET.Element(
+        "svg",
+        {
+            "xmlns": "http://www.w3.org/2000/svg",
+            "width": str(width),
+            "height": str(height),
+            "viewBox": f"0 0 {width} {height}",
+        },
+    )
+
+    ET.SubElement(
+        svg,
+        "rect",
+        {
+            "x": "0",
+            "y": "0",
+            "width": "100%",
+            "height": "100%",
+            "fill": "#f8fafc",
+        },
+    )
+    title_node = ET.SubElement(
+        svg,
+        "text",
+        {
+            "x": "24",
+            "y": "28",
+            "font-family": "Arial, sans-serif",
+            "font-size": "18",
+            "font-weight": "bold",
+            "fill": "#0f172a",
+        },
+    )
+    title_node.text = title
 
     for edge in edges:
         source = node_index.get(edge.get("source"))
@@ -114,8 +142,17 @@ def graphics_to_svg(graphics_model: dict[str, Any]) -> str:
         y1 = source["y"] + source["height"]
         x2 = target["x"] + target["width"] / 2
         y2 = target["y"]
-        parts.append(
-            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#64748b" stroke-width="2"/>'
+        ET.SubElement(
+            svg,
+            "line",
+            {
+                "x1": str(x1),
+                "y1": str(y1),
+                "x2": str(x2),
+                "y2": str(y2),
+                "stroke": "#64748b",
+                "stroke-width": "2",
+            },
         )
 
     for node in nodes:
@@ -123,7 +160,7 @@ def graphics_to_svg(graphics_model: dict[str, Any]) -> str:
         y = node["y"]
         width = node["width"]
         height = node["height"]
-        label = escape(str(node.get("label", "")))
+        label = str(node.get("label", ""))
         kind = str(node.get("kind", "statement"))
         fill = {
             "package": "#dbeafe",
@@ -132,20 +169,38 @@ def graphics_to_svg(graphics_model: dict[str, Any]) -> str:
             "statement": "#ffffff",
         }.get(kind, "#ffffff")
         text_lines = wrap(label, width=42) or [label]
-        parts.append(
-            f'<g><rect x="{x}" y="{y}" rx="12" ry="12" width="{width}" height="{height}" fill="{fill}" stroke="#0f172a" stroke-width="1.5"/>'
+        group = ET.SubElement(svg, "g")
+        ET.SubElement(
+            group,
+            "rect",
+            {
+                "x": str(x),
+                "y": str(y),
+                "rx": "12",
+                "ry": "12",
+                "width": str(width),
+                "height": str(height),
+                "fill": fill,
+                "stroke": "#0f172a",
+                "stroke-width": "1.5",
+            },
         )
         text_y = y + 28
         for line_index, text_line in enumerate(text_lines[:2]):
-            parts.append(
-                f'<text x="{x + 16}" y="{text_y + line_index * 18}" font-family="Arial, sans-serif" font-size="14" fill="#0f172a">{escape(text_line)}</text>'
+            text_node = ET.SubElement(
+                group,
+                "text",
+                {
+                    "x": str(x + 16),
+                    "y": str(text_y + line_index * 18),
+                    "font-family": "Arial, sans-serif",
+                    "font-size": "14",
+                    "fill": "#0f172a",
+                },
             )
-        parts.append(
-            "</g>"
-        )
+            text_node.text = text_line
 
-    parts.append("</svg>")
-    return "\n".join(parts)
+    return ET.tostring(svg, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
 
 def graphics_to_code(graphics_model: dict[str, Any]) -> str:
