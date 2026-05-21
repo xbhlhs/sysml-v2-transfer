@@ -1,58 +1,105 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import xml.etree.ElementTree as ET
 from textwrap import wrap
 from typing import Any
 
 
-DEFAULT_CANVAS_WIDTH = 560
-DEFAULT_CANVAS_MIN_HEIGHT = 180
-DEFAULT_BACKGROUND_FILL = "#f8fafc"
-DEFAULT_TITLE_FILL = "#0f172a"
-DEFAULT_TITLE_FONT_FAMILY = "Arial, sans-serif"
-DEFAULT_TITLE_FONT_SIZE = 18
-DEFAULT_NODE_FONT_FAMILY = "Arial, sans-serif"
-DEFAULT_NODE_FONT_SIZE = 14
-DEFAULT_NODE_FILL = "#ffffff"
-DEFAULT_NODE_STROKE = "#0f172a"
-DEFAULT_NODE_STROKE_WIDTH = 1.5
+@dataclass(frozen=True)
+class SVGTheme:
+    canvas_width: int = 560
+    canvas_min_height: int = 180
+    background_fill: str = "#f8fafc"
+    title_fill: str = "#0f172a"
+    title_font_family: str = "Arial, sans-serif"
+    title_font_size: int = 18
+    node_font_family: str = "Arial, sans-serif"
+    package_font_family: str = "Arial, sans-serif"
+    relationship_font_family: str = "Arial, sans-serif"
+    node_font_size: int = 14
+    package_font_size: int = 16
+    relationship_font_size: int = 13
+    node_fill: str = "#ffffff"
+    package_fill: str = "#bfdbfe"
+    definition_fill: str = "#dcfce7"
+    relationship_fill: str = "#f8fafc"
+    node_stroke: str = "#0f172a"
+    relationship_stroke: str = "#94a3b8"
+    node_stroke_width: float = 1.5
+    package_stroke_width: float = 2
+    relationship_stroke_width: float = 1.25
+    package_rx: int = 16
+    package_ry: int = 16
+    node_rx: int = 12
+    node_ry: int = 12
+    relationship_dasharray: str = "6 4"
+    title_x: int = 24
+    title_y: int = 28
+    package_text_y_offset: int = 44
+    node_text_y_offset: int = 30
+    text_line_height: int = 18
+
+    def fill_for_kind(self, kind: str) -> str:
+        return {
+            "package": self.package_fill,
+            "definition": self.definition_fill,
+            "relationship": self.relationship_fill,
+            "statement": self.node_fill,
+        }.get(kind, self.node_fill)
+
+    def stroke_for_kind(self, kind: str) -> str:
+        if kind == "relationship":
+            return self.relationship_stroke
+        return self.node_stroke
+
+    def stroke_width_for_kind(self, kind: str) -> str:
+        if kind == "package":
+            return str(self.package_stroke_width)
+        if kind == "relationship":
+            return str(self.relationship_stroke_width)
+        return str(self.node_stroke_width)
+
+    def dasharray_for_kind(self, kind: str) -> str | None:
+        if kind == "relationship":
+            return self.relationship_dasharray
+        return None
+
+    def font_family_for_kind(self, kind: str) -> str:
+        if kind == "package":
+            return self.package_font_family
+        if kind == "relationship":
+            return self.relationship_font_family
+        return self.node_font_family
+
+    def font_size_for_kind(self, kind: str) -> str:
+        if kind == "package":
+            return str(self.package_font_size)
+        if kind == "relationship":
+            return str(self.relationship_font_size)
+        return str(self.node_font_size)
+
+    def font_weight_for_kind(self, kind: str) -> str:
+        if kind == "package":
+            return "bold"
+        return "normal"
+
+    def text_y_offset_for_kind(self, kind: str) -> int:
+        if kind == "package":
+            return self.package_text_y_offset
+        return self.node_text_y_offset
 
 
-def _node_fill(kind: str) -> str:
-    return {
-        "package": "#bfdbfe",
-        "definition": "#dcfce7",
-        "relationship": "#f8fafc",
-        "statement": "#ffffff",
-    }.get(kind, DEFAULT_NODE_FILL)
-
-
-def _node_stroke(kind: str) -> str:
-    if kind == "relationship":
-        return "#94a3b8"
-    return DEFAULT_NODE_STROKE
-
-
-def _node_stroke_width(kind: str) -> str:
-    if kind == "package":
-        return "2"
-    if kind == "relationship":
-        return "1.25"
-    return f"{DEFAULT_NODE_STROKE_WIDTH}"
-
-
-def _node_dasharray(kind: str) -> str | None:
-    if kind == "relationship":
-        return "6 4"
-    return None
+DEFAULT_THEME = SVGTheme()
 
 
 def draw_background(
     parent: ET.Element,
     *,
-    width: int = DEFAULT_CANVAS_WIDTH,
-    height: int = DEFAULT_CANVAS_MIN_HEIGHT,
-    fill: str = DEFAULT_BACKGROUND_FILL,
+    theme: SVGTheme = DEFAULT_THEME,
+    width: int | None = None,
+    height: int | None = None,
+    fill: str | None = None,
 ) -> ET.Element:
     return ET.SubElement(
         parent,
@@ -60,9 +107,9 @@ def draw_background(
         {
             "x": "0",
             "y": "0",
-            "width": str(width),
-            "height": str(height),
-            "fill": fill,
+            "width": str(width if width is not None else theme.canvas_width),
+            "height": str(height if height is not None else theme.canvas_min_height),
+            "fill": fill if fill is not None else theme.background_fill,
         },
     )
 
@@ -74,11 +121,12 @@ def draw_rect(
     width: float,
     height: float,
     *,
-    fill: str = DEFAULT_NODE_FILL,
-    stroke: str = DEFAULT_NODE_STROKE,
-    stroke_width: str | float = DEFAULT_NODE_STROKE_WIDTH,
-    rx: str | int = "12",
-    ry: str | int = "12",
+    theme: SVGTheme = DEFAULT_THEME,
+    fill: str | None = None,
+    stroke: str | None = None,
+    stroke_width: str | float | None = None,
+    rx: str | int | None = None,
+    ry: str | int | None = None,
     dasharray: str | None = None,
 ) -> ET.Element:
     attrs = {
@@ -86,11 +134,11 @@ def draw_rect(
         "y": str(y),
         "width": str(width),
         "height": str(height),
-        "fill": fill,
-        "stroke": stroke,
-        "stroke-width": str(stroke_width),
-        "rx": str(rx),
-        "ry": str(ry),
+        "fill": fill if fill is not None else theme.node_fill,
+        "stroke": stroke if stroke is not None else theme.node_stroke,
+        "stroke-width": str(stroke_width if stroke_width is not None else theme.node_stroke_width),
+        "rx": str(rx if rx is not None else theme.node_rx),
+        "ry": str(ry if ry is not None else theme.node_ry),
     }
     if dasharray:
         attrs["stroke-dasharray"] = dasharray
@@ -129,10 +177,10 @@ def draw_text(
     y: float,
     text: str,
     *,
-    font_family: str = DEFAULT_NODE_FONT_FAMILY,
-    font_size: str | int = DEFAULT_NODE_FONT_SIZE,
+    font_family: str = "Arial, sans-serif",
+    font_size: str | int = 14,
     font_weight: str = "normal",
-    fill: str = DEFAULT_TITLE_FILL,
+    fill: str = "#0f172a",
     text_anchor: str = "start",
 ) -> ET.Element:
     text_node = ET.SubElement(
@@ -156,22 +204,19 @@ def _draw_title(
     parent: ET.Element,
     title: str,
     *,
-    x: float = 24,
-    y: float = 28,
-    font_family: str = DEFAULT_TITLE_FONT_FAMILY,
-    font_size: str | int = DEFAULT_TITLE_FONT_SIZE,
-    font_weight: str = "bold",
-    fill: str = DEFAULT_TITLE_FILL,
+    theme: SVGTheme = DEFAULT_THEME,
+    x: float | None = None,
+    y: float | None = None,
 ) -> ET.Element:
     return draw_text(
         parent,
-        x,
-        y,
+        x if x is not None else theme.title_x,
+        y if y is not None else theme.title_y,
         title,
-        font_family=font_family,
-        font_size=font_size,
-        font_weight=font_weight,
-        fill=fill,
+        font_family=theme.title_font_family,
+        font_size=theme.title_font_size,
+        font_weight="bold",
+        fill=theme.title_fill,
     )
 
 
@@ -181,17 +226,19 @@ def _draw_node_label(
     *,
     x: float,
     y: float,
-    font_size: str | int,
-    font_weight: str,
-    fill: str = DEFAULT_TITLE_FILL,
-    font_family: str = DEFAULT_NODE_FONT_FAMILY,
+    theme: SVGTheme = DEFAULT_THEME,
+    kind: str = "statement",
 ) -> None:
     text_lines = wrap(label, width=42) or [label]
+    font_family = theme.font_family_for_kind(kind)
+    font_size = theme.font_size_for_kind(kind)
+    font_weight = theme.font_weight_for_kind(kind)
+    fill = theme.title_fill
     for line_index, text_line in enumerate(text_lines[:2]):
         draw_text(
             parent,
             x,
-            y + line_index * 18,
+            y + line_index * theme.text_line_height,
             text_line,
             font_family=font_family,
             font_size=font_size,
@@ -200,7 +247,7 @@ def _draw_node_label(
         )
 
 
-def render_package(parent: ET.Element, node: dict[str, Any]) -> None:
+def render_package(parent: ET.Element, node: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEME) -> None:
     x = node["x"]
     y = node["y"]
     node_width = node["width"]
@@ -213,23 +260,29 @@ def render_package(parent: ET.Element, node: dict[str, Any]) -> None:
         y,
         node_width,
         node_height,
-        fill=_node_fill("package"),
-        stroke=_node_stroke("package"),
-        stroke_width=_node_stroke_width("package"),
-        rx="16",
-        ry="16",
+        theme=theme,
+        fill=theme.fill_for_kind("package"),
+        stroke=theme.stroke_for_kind("package"),
+        stroke_width=theme.stroke_width_for_kind("package"),
+        rx=theme.package_rx,
+        ry=theme.package_ry,
     )
     _draw_node_label(
         group,
         label,
         x=x + 16,
-        y=y + 44,
-        font_size="16",
-        font_weight="bold",
+        y=y + theme.package_text_y_offset,
+        theme=theme,
+        kind="package",
     )
 
 
-def render_definition(parent: ET.Element, node: dict[str, Any]) -> None:
+def render_definition(
+    parent: ET.Element,
+    node: dict[str, Any],
+    *,
+    theme: SVGTheme = DEFAULT_THEME,
+) -> None:
     x = node["x"]
     y = node["y"]
     node_width = node["width"]
@@ -242,21 +295,27 @@ def render_definition(parent: ET.Element, node: dict[str, Any]) -> None:
         y,
         node_width,
         node_height,
-        fill=_node_fill("definition"),
-        stroke=_node_stroke("definition"),
-        stroke_width=_node_stroke_width("definition"),
+        theme=theme,
+        fill=theme.fill_for_kind("definition"),
+        stroke=theme.stroke_for_kind("definition"),
+        stroke_width=theme.stroke_width_for_kind("definition"),
     )
     _draw_node_label(
         group,
         label,
         x=x + 16,
-        y=y + 30,
-        font_size="14",
-        font_weight="normal",
+        y=y + theme.node_text_y_offset,
+        theme=theme,
+        kind="definition",
     )
 
 
-def render_relationship(parent: ET.Element, node: dict[str, Any]) -> None:
+def render_relationship(
+    parent: ET.Element,
+    node: dict[str, Any],
+    *,
+    theme: SVGTheme = DEFAULT_THEME,
+) -> None:
     x = node["x"]
     y = node["y"]
     node_width = node["width"]
@@ -269,53 +328,50 @@ def render_relationship(parent: ET.Element, node: dict[str, Any]) -> None:
         y,
         node_width,
         node_height,
-        fill=_node_fill("relationship"),
-        stroke=_node_stroke("relationship"),
-        stroke_width=_node_stroke_width("relationship"),
-        dasharray=_node_dasharray("relationship"),
+        theme=theme,
+        fill=theme.fill_for_kind("relationship"),
+        stroke=theme.stroke_for_kind("relationship"),
+        stroke_width=theme.stroke_width_for_kind("relationship"),
+        dasharray=theme.dasharray_for_kind("relationship"),
     )
     _draw_node_label(
         group,
         label,
         x=x + 16,
-        y=y + 30,
-        font_size="13",
-        font_weight="normal",
+        y=y + theme.node_text_y_offset,
+        theme=theme,
+        kind="relationship",
     )
 
 
-def render_statement(parent: ET.Element, node: dict[str, Any]) -> None:
+def render_statement(
+    parent: ET.Element,
+    node: dict[str, Any],
+    *,
+    theme: SVGTheme = DEFAULT_THEME,
+) -> None:
     x = node["x"]
     y = node["y"]
     node_width = node["width"]
     node_height = node["height"]
     label = str(node.get("label", ""))
     group = ET.SubElement(parent, "g")
-    draw_rect(
-        group,
-        x,
-        y,
-        node_width,
-        node_height,
-        fill=_node_fill("statement"),
-        stroke=_node_stroke("statement"),
-        stroke_width=_node_stroke_width("statement"),
-    )
+    draw_rect(group, x, y, node_width, node_height, theme=theme)
     _draw_node_label(
         group,
         label,
         x=x + 16,
-        y=y + 30,
-        font_size="14",
-        font_weight="normal",
+        y=y + theme.node_text_y_offset,
+        theme=theme,
+        kind="statement",
     )
 
 
-def render_svg(graphics_model: dict[str, Any]) -> str:
+def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEME) -> str:
     nodes = graphics_model.get("nodes", [])
     edges = graphics_model.get("edges", [])
-    width = DEFAULT_CANVAS_WIDTH
-    height = max(DEFAULT_CANVAS_MIN_HEIGHT, 100 + max(len(nodes), 1) * 100)
+    width = theme.canvas_width
+    height = max(theme.canvas_min_height, 100 + max(len(nodes), 1) * 100)
     title = str(graphics_model.get("title", "SysML v2 Transfer"))
 
     node_index = {node["id"]: node for node in nodes}
@@ -329,8 +385,8 @@ def render_svg(graphics_model: dict[str, Any]) -> str:
         },
     )
 
-    draw_background(svg, width=width, height=height)
-    _draw_title(svg, title)
+    draw_background(svg, theme=theme, width=width, height=height)
+    _draw_title(svg, title, theme=theme)
 
     for edge in edges:
         source = node_index.get(edge.get("source"))
@@ -350,20 +406,20 @@ def render_svg(graphics_model: dict[str, Any]) -> str:
             y1,
             x2,
             y2,
-            stroke="#94a3b8" if dashed else "#64748b",
-            stroke_width="1.5" if dashed else "2",
-            dasharray="6 4" if dashed else None,
+            stroke=theme.relationship_stroke if dashed else "#64748b",
+            stroke_width=theme.relationship_stroke_width if dashed else "2",
+            dasharray=theme.relationship_dasharray if dashed else None,
         )
 
     for node in nodes:
         kind = str(node.get("kind", "statement"))
         if kind == "package":
-            render_package(svg, node)
+            render_package(svg, node, theme=theme)
         elif kind == "definition":
-            render_definition(svg, node)
+            render_definition(svg, node, theme=theme)
         elif kind == "relationship":
-            render_relationship(svg, node)
+            render_relationship(svg, node, theme=theme)
         else:
-            render_statement(svg, node)
+            render_statement(svg, node, theme=theme)
 
     return ET.tostring(svg, encoding="utf-8", xml_declaration=True).decode("utf-8")

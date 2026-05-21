@@ -8,7 +8,7 @@ from core import (
     render_svg,
     strip_inline_comment,
 )
-from core.svg import draw_line, draw_rect, draw_text
+from core.svg import DEFAULT_THEME, SVGTheme, draw_line, draw_rect, draw_text
 import xml.etree.ElementTree as ET
 
 
@@ -76,3 +76,15 @@ def test_svg_primitives_use_defaults() -> None:
     assert text.attrib["font-family"] == "Arial, sans-serif"
     assert text.attrib["font-size"] == "14"
     assert text.text == "Hello"
+
+
+def test_svg_theme_defaults() -> None:
+    theme = DEFAULT_THEME
+
+    assert isinstance(theme, SVGTheme)
+    assert theme.fill_for_kind("package") == "#bfdbfe"
+    assert theme.fill_for_kind("relationship") == "#f8fafc"
+    assert theme.stroke_for_kind("relationship") == "#94a3b8"
+    assert theme.stroke_width_for_kind("package") == "2"
+    assert theme.dasharray_for_kind("relationship") == "6 4"
+    assert theme.font_size_for_kind("package") == "16"
