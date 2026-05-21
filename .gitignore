@@ -1,9 +1,61 @@
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
 .pytest_cache/
-.venv/
-.env
-/dist
-/build
+.mypy_cache/
+.pytype/
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
 *.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.egg
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.*
+
+# Python tooling
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Icon?
+._*
+.Spotlight-V100/
+.Trashes
+.VolumeIcon.icns
+.fseventsd/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code
+.vscode/
+*.code-workspace
