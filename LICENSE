@@ -1,0 +1,11 @@
+Repository Licensing Notice
+
+This repository uses mixed licensing by subtree:
+
+- `core/` is licensed under the MIT License.
+- `cli/` is licensed under the MIT License.
+- `gui/` is licensed under the Apache License 2.0.
+
+Each subtree contains its own license text. If you work in one of those
+directories, follow the license that applies there.
+
