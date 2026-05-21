@@ -8,6 +8,7 @@ from core import (
     render_svg,
     strip_inline_comment,
 )
+from core.svg import draw_line, draw_rect, draw_text
 import xml.etree.ElementTree as ET
 
 
@@ -58,3 +59,20 @@ def test_svg_structure_snapshot_style() -> None:
     relationship_rect = rects[3].attrib
     assert relationship_rect["stroke-dasharray"] == "6 4"
     assert relationship_rect["fill"] == "#f8fafc"
+
+
+def test_svg_primitives_use_defaults() -> None:
+    root = ET.Element("svg")
+    rect = draw_rect(root, 10, 20, 100, 40)
+    line = draw_line(root, 5, 6, 7, 8)
+    text = draw_text(root, 12, 34, "Hello")
+
+    assert rect.attrib["fill"] == "#ffffff"
+    assert rect.attrib["stroke"] == "#0f172a"
+    assert rect.attrib["stroke-width"] == "1.5"
+    assert "stroke-dasharray" not in rect.attrib
+    assert line.attrib["stroke"] == "#64748b"
+    assert line.attrib["stroke-width"] == "2"
+    assert text.attrib["font-family"] == "Arial, sans-serif"
+    assert text.attrib["font-size"] == "14"
+    assert text.text == "Hello"
