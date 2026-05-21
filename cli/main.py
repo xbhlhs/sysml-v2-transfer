@@ -14,13 +14,14 @@ app = typer.Typer(help="SysML v2 转换工具集 CLI")
 
 @app.command("code-to-graphics")
 def code_to_graphics_cmd(
-    input_path: Path = typer.Argument(..., help="SysML v2 源文件或文本路径"),
+    input_value: str = typer.Argument(..., help="SysML v2 源文件路径或原始文本"),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="输出 SVG 可视化文件路径"),
     raw: bool = typer.Option(False, "--raw", help="将输入视为原始文本而不是文件路径"),
 ) -> None:
     if raw:
-        sysml_text = input_path.read_text()
+        sysml_text = input_value
     else:
+        input_path = Path(input_value)
         sysml_text = input_path.read_text(encoding="utf-8")
 
     graphics = code_to_graphics(sysml_text)

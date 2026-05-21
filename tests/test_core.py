@@ -20,3 +20,4 @@ def test_graphics_to_svg_contains_svg_root() -> None:
     assert svg.startswith("<?xml")
     assert "<svg" in svg
     assert "package Example" in svg
+    assert "fill=\"#dbeafe\"" in svg or "fill=\"#dcfce7\"" in svg

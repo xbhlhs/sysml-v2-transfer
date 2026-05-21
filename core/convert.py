@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import escape
+from textwrap import wrap
 from typing import Any
 
 @dataclass
@@ -19,22 +20,47 @@ class SysMLModel:
         return cls(elements=payload.get("elements", {}))
 
 
+def _strip_inline_comment(line: str) -> str:
+    comment_start = line.find("//")
+    if comment_start >= 0:
+        return line[:comment_start].rstrip()
+    return line
+
+
+def _classify_statement(statement: str) -> str:
+    lowered = statement.lower()
+    if lowered.startswith("package "):
+        return "package"
+    if " def " in f" {lowered} " or lowered.startswith("def "):
+        return "definition"
+    if "->" in statement or "connect" in lowered:
+        return "relationship"
+    return "statement"
+
+
 def code_to_graphics(sysml_code: str) -> dict[str, Any]:
     """Convert SysML v2 textual code to a simple graphics model."""
-    lines = [line.strip() for line in sysml_code.splitlines() if line.strip()]
-    if not lines:
-        lines = ["empty model"]
+    statements = [
+        _strip_inline_comment(line).strip()
+        for line in sysml_code.splitlines()
+    ]
+    statements = [line for line in statements if line]
+    if not statements:
+        statements = ["empty model"]
 
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
-    for index, label in enumerate(lines):
+    for index, statement in enumerate(statements):
+        kind = _classify_statement(statement)
+        width = min(420, max(260, 16 + len(statement) * 8))
         nodes.append(
             {
                 "id": f"node-{index}",
-                "label": label,
+                "label": statement,
+                "kind": kind,
                 "x": 40,
                 "y": 40 + index * 100,
-                "width": 360,
+                "width": width,
                 "height": 56,
             }
         )
@@ -50,6 +76,14 @@ def code_to_graphics(sysml_code: str) -> dict[str, Any]:
     return {
         "type": "sysml-diagram",
         "content": sysml_code,
+        "title": next(
+            (
+                statement.split(maxsplit=1)[1].replace("{", "").replace("}", "").strip()
+                for statement in statements
+                if statement.lower().startswith("package ")
+            ),
+            "SysML v2 model",
+        ),
         "nodes": nodes,
         "edges": edges,
     }
@@ -59,15 +93,16 @@ def graphics_to_svg(graphics_model: dict[str, Any]) -> str:
     """Render the graphics model as a minimal SVG diagram."""
     nodes = graphics_model.get("nodes", [])
     edges = graphics_model.get("edges", [])
-    width = 440
-    height = max(180, 80 + max(len(nodes), 1) * 100)
+    width = 560
+    height = max(180, 100 + max(len(nodes), 1) * 100)
+    title = escape(str(graphics_model.get("title", "SysML v2 Transfer")))
 
     node_index = {node["id"]: node for node in nodes}
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect x="0" y="0" width="100%" height="100%" fill="#f8fafc"/>',
-        '<text x="24" y="28" font-family="Arial, sans-serif" font-size="18" fill="#0f172a">SysML v2 Transfer</text>',
+        f'<text x="24" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#0f172a">{title}</text>',
     ]
 
     for edge in edges:
@@ -89,9 +124,24 @@ def graphics_to_svg(graphics_model: dict[str, Any]) -> str:
         width = node["width"]
         height = node["height"]
         label = escape(str(node.get("label", "")))
+        kind = str(node.get("kind", "statement"))
+        fill = {
+            "package": "#dbeafe",
+            "definition": "#dcfce7",
+            "relationship": "#fef3c7",
+            "statement": "#ffffff",
+        }.get(kind, "#ffffff")
+        text_lines = wrap(label, width=42) or [label]
         parts.append(
-            f'<g><rect x="{x}" y="{y}" rx="12" ry="12" width="{width}" height="{height}" fill="#ffffff" stroke="#0f172a" stroke-width="1.5"/>'
-            f'<text x="{x + 16}" y="{y + 34}" font-family="Arial, sans-serif" font-size="14" fill="#0f172a">{label}</text></g>'
+            f'<g><rect x="{x}" y="{y}" rx="12" ry="12" width="{width}" height="{height}" fill="{fill}" stroke="#0f172a" stroke-width="1.5"/>'
+        )
+        text_y = y + 28
+        for line_index, text_line in enumerate(text_lines[:2]):
+            parts.append(
+                f'<text x="{x + 16}" y="{text_y + line_index * 18}" font-family="Arial, sans-serif" font-size="14" fill="#0f172a">{escape(text_line)}</text>'
+            )
+        parts.append(
+            "</g>"
         )
 
     parts.append("</svg>")
