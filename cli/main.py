@@ -6,7 +6,7 @@ from typing import Optional
 import typer
 from rich import print
 
-from core import code_to_graphics, graphics_to_code
+from core import code_to_graphics, graphics_to_code, graphics_to_svg
 from gui.app import run_gui
 
 app = typer.Typer(help="SysML v2 转换工具集 CLI")
@@ -15,7 +15,7 @@ app = typer.Typer(help="SysML v2 转换工具集 CLI")
 @app.command("code-to-graphics")
 def code_to_graphics_cmd(
     input_path: Path = typer.Argument(..., help="SysML v2 源文件或文本路径"),
-    output: Optional[Path] = typer.Option(None, "-o", "--output", help="输出图形模型文件路径"),
+    output: Optional[Path] = typer.Option(None, "-o", "--output", help="输出 SVG 可视化文件路径"),
     raw: bool = typer.Option(False, "--raw", help="将输入视为原始文本而不是文件路径"),
 ) -> None:
     if raw:
@@ -24,9 +24,10 @@ def code_to_graphics_cmd(
         sysml_text = input_path.read_text(encoding="utf-8")
 
     graphics = code_to_graphics(sysml_text)
-    result = output or Path("output-graphics.json")
-    result.write_text(str(graphics), encoding="utf-8")
-    print(f"[green]已生成图形模型：{result}")
+    svg = graphics_to_svg(graphics)
+    result = output or Path("output-graphics.svg")
+    result.write_text(svg, encoding="utf-8")
+    print(f"[green]已生成 SVG 可视化：{result}")
 
 
 @app.command("graphics-to-code")
