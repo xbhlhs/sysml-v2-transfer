@@ -1,1 +1,2 @@
-"""GUI package for SysML v2 transfer toolkit."""
+"""SPDX-FileCopyrightText: 2026 xbhlhs
+SPDX-License-Identifier: Apache-2.0"""

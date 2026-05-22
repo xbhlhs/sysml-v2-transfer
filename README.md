@@ -70,3 +70,7 @@ python -m cli.main gui
 2. 再让 GUI 复现同样的可视化流程
 3. 然后补齐最小 SysML v2 语义、视图与导航
 4. 再做可视化结果回写为 SysML v2 代码，形成 `1.0.0` 级别的最小闭环
+
+## 许可证
+
+仓库根目录默认采用 Apache-2.0；`core/` 和 `cli/` 采用 MIT；`gui/` 继续采用 Apache-2.0。具体以各目录内的 `LICENSE` 文件为准。

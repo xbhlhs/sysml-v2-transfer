@@ -1,0 +1,10 @@
+This repository uses directory-level licensing.
+
+Default top-level license:
+- Apache License 2.0
+
+Directory exceptions:
+- `core/` and `cli/` are licensed under the MIT License.
+- `gui/` is licensed under the Apache License 2.0.
+
+No third-party attribution notices are currently bundled in this repository.
