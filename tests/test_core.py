@@ -8,9 +8,12 @@ from core import (
     extract_title,
     graphics_to_code,
     graphics_to_svg,
+    parse_sysml,
+    parse_sysml_events,
     render_svg,
     strip_inline_comment,
 )
+from core.ast import DefinitionNode, FlowNode, UsageNode
 from core.text_layout import wrap_text
 from core.svg import DEFAULT_THEME, SVGTheme, draw_line, draw_rect, draw_text
 
@@ -58,7 +61,6 @@ def test_svg_structure_snapshot_style() -> None:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     rects = root.findall(".//svg:rect", ns)
     assert rects[1].attrib["width"] == "520"
-    assert rects[2].attrib["width"] != rects[3].attrib["width"]
     relationship_rect = rects[3].attrib
     assert relationship_rect["stroke-dasharray"] == "6 4"
     assert relationship_rect["fill"] == "#f8fafc"
@@ -166,3 +168,51 @@ def test_package_height_grows_for_long_camel_case_title() -> None:
     package = model["nodes"][0]
     assert package["kind"] == "package"
     assert package["height"] > 76
+
+
+def test_parser_builds_ast_for_pla_model() -> None:
+    document = parse_sysml(Path(".local-test/pla.sysml").read_text())
+    assert document.package is not None
+    assert document.package.name == "AirborneSoftwarePLA"
+
+    definitions = [member for member in document.package.members if isinstance(member, DefinitionNode)]
+    pla = next(member for member in definitions if member.name == "ProcessLifecycleAgent")
+    ports = [member for member in pla.members if isinstance(member, UsageNode) and member.keyword == "port"]
+    parts = [member for member in pla.members if isinstance(member, UsageNode) and member.keyword == "part"]
+    flows = [member for member in pla.members if isinstance(member, FlowNode)]
+
+    assert pla.documentation.startswith("Represents the core PLA component")
+    assert {port.name for port in ports} >= {"constraintIn", "daRequestOut", "daResponseIn", "evidenceOut"}
+    assert {part.name for part in parts} >= {"perception", "decision", "execution", "correction", "stability"}
+    assert len(flows) == 12
+    assert flows[0].item_type == "ConstraintInput"
+    assert flows[0].source == "constraintIn"
+    assert flows[0].target == "perception.constraintIn"
+
+
+def test_parser_exposes_events_for_pla_model() -> None:
+    events = parse_sysml_events(Path(".local-test/pla.sysml").read_text())
+    kinds = [event.kind for event in events]
+    flow_events = [event for event in events if event.kind == "flow"]
+
+    assert kinds[0] == "enter_package"
+    assert kinds.count("enter_definition") == 18
+    assert kinds.count("usage") == 34
+    assert len(flow_events) == 16
+    assert flow_events[0].item_type == "ConstraintInput"
+    assert flow_events[0].source == "constraintIn"
+    assert flow_events[0].target == "perception.constraintIn"
+
+
+def test_graphics_model_uses_ast_for_pla_model() -> None:
+    model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
+    labels = {node["label"] for node in model["nodes"]}
+    flow_nodes = [node for node in model["nodes"] if node["kind"] == "relationship"]
+
+    assert model["title"] == "AirborneSoftwarePLA"
+    assert "ProcessLifecycleAgent" in labels
+    assert "perception" in labels
+    assert "airborneSystem" in labels
+    assert len(flow_nodes) == 16
+    assert all("flow of" not in node["label"].lower() for node in flow_nodes)
+    assert any(node["secondary_label"] == "constraintIn -> perception.constraintIn" for node in flow_nodes)

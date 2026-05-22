@@ -25,12 +25,27 @@ def code_to_graphics_cmd(
         sysml_text = input_value
     else:
         input_path = Path(input_value)
-        sysml_text = input_path.read_text(encoding="utf-8")
+        if not input_path.exists():
+            raise typer.BadParameter(f"输入文件不存在：{input_path}")
+        if not input_path.is_file():
+            raise typer.BadParameter(f"输入路径不是文件：{input_path}")
+        try:
+            sysml_text = input_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise typer.BadParameter(f"无法读取输入文件：{input_path}") from exc
 
-    graphics = code_to_graphics(sysml_text)
-    svg = graphics_to_svg(graphics)
+    try:
+        graphics = code_to_graphics(sysml_text)
+        svg = graphics_to_svg(graphics)
+    except Exception as exc:
+        raise typer.BadParameter(f"转换失败：{exc}") from exc
+
     result = output or Path("output-graphics.svg")
-    result.write_text(svg, encoding="utf-8")
+    try:
+        result.parent.mkdir(parents=True, exist_ok=True)
+        result.write_text(svg, encoding="utf-8")
+    except OSError as exc:
+        raise typer.BadParameter(f"无法写入输出文件：{result}") from exc
     print(f"[green]已生成 SVG 可视化：{result}")
 
 
