@@ -38,6 +38,9 @@ SVG_CARD_MIN_WRAP_CHARS = 10
 SVG_DEFAULT_FONT_SIZE = 14
 SVG_DEFAULT_EDGE_STROKE_WIDTH = "2"
 SVG_DEFAULT_EDGE_STROKE = "#475569"
+SVG_EDGE_DASHARRAY = "8 5"
+SVG_ARROW_MARKER_ID = "arrow-head"
+SVG_DIAMOND_MARKER_ID = "diamond-head"
 SVG_LAYOUT_HEIGHT_BASE = 100
 SVG_LAYOUT_HEIGHT_PER_NODE = 100
 SVG_LAYOUT_BOTTOM_PADDING = 40
@@ -110,6 +113,8 @@ def draw_line(
     stroke_width: str | float = SVG_DEFAULT_EDGE_STROKE_WIDTH,
     dasharray: str | None = None,
     linecap: str = "round",
+    marker_start: str | None = None,
+    marker_end: str | None = None,
 ) -> ET.Element:
     attrs = {
         "x1": str(x1),
@@ -122,6 +127,10 @@ def draw_line(
     }
     if dasharray:
         attrs["stroke-dasharray"] = dasharray
+    if marker_start:
+        attrs["marker-start"] = marker_start
+    if marker_end:
+        attrs["marker-end"] = marker_end
     return ET.SubElement(parent, "line", attrs)
 
 
@@ -291,6 +300,54 @@ def _add_documentation(parent: ET.Element, node: dict[str, Any]) -> None:
         desc.text = documentation
 
 
+def _add_markers(parent: ET.Element, *, theme: SVGTheme = DEFAULT_THEME) -> None:
+    defs = ET.SubElement(parent, "defs")
+
+    arrow = ET.SubElement(
+        defs,
+        "marker",
+        {
+            "id": SVG_ARROW_MARKER_ID,
+            "markerWidth": "8",
+            "markerHeight": "8",
+            "refX": "7",
+            "refY": "4",
+            "orient": "auto",
+            "markerUnits": "strokeWidth",
+        },
+    )
+    ET.SubElement(
+        arrow,
+        "path",
+        {
+            "d": "M 0 0 L 8 4 L 0 8 z",
+            "fill": theme.relationship_stroke,
+        },
+    )
+
+    diamond = ET.SubElement(
+        defs,
+        "marker",
+        {
+            "id": SVG_DIAMOND_MARKER_ID,
+            "markerWidth": "8",
+            "markerHeight": "8",
+            "refX": "7",
+            "refY": "4",
+            "orient": "auto",
+            "markerUnits": "strokeWidth",
+        },
+    )
+    ET.SubElement(
+        diamond,
+        "path",
+        {
+            "d": "M 0 4 L 4 0 L 8 4 L 4 8 z",
+            "fill": theme.node_stroke,
+        },
+    )
+
+
 def _render_card(
     parent: ET.Element,
     node: dict[str, Any],
@@ -319,8 +376,8 @@ def _render_card(
         fill=theme.fill_for_kind(kind),
         stroke=theme.stroke_for_kind(kind),
         stroke_width=theme.stroke_width_for_kind(kind),
-        rx=theme.package_rx if package_style else None,
-        ry=theme.package_ry if package_style else None,
+        rx=theme.package_rx if package_style else (theme.usage_rx if kind == "usage" else None),
+        ry=theme.package_ry if package_style else (theme.usage_ry if kind == "usage" else None),
         dasharray=theme.dasharray_for_kind(kind),
     )
 
@@ -348,7 +405,7 @@ def _render_card(
         width=node_width - SVG_CARD_TEXT_WIDTH_PADDING,
         theme=theme,
         kind=kind,
-        font_size=SVG_PACKAGE_TITLE_FONT_SIZE if kind == "package" else SVG_KIND_TITLE_FONT_SIZE,
+        font_size=SVG_PACKAGE_TITLE_FONT_SIZE if kind == "package" else (SVG_KIND_TITLE_FONT_SIZE - 1 if kind == "usage" else SVG_KIND_TITLE_FONT_SIZE),
         font_weight="bold",
     )
     current_y += title_lines * theme.text_line_height
@@ -391,7 +448,7 @@ def _render_card(
             width=node_width - (SVG_CARD_LEFT_PADDING + SVG_CARD_RIGHT_PADDING),
             theme=theme,
             kind=kind,
-            font_size=SVG_DOC_BODY_FONT_SIZE_REDUCED if kind == "relationship" else SVG_DOC_BODY_FONT_SIZE,
+            font_size=SVG_DOC_BODY_FONT_SIZE_REDUCED if kind in {"relationship", "usage"} else SVG_DOC_BODY_FONT_SIZE,
             fill=SVG_DOC_BODY_COLOR_DIM if kind == "package" else SVG_DOC_BODY_COLOR,
         )
 
@@ -409,6 +466,15 @@ def render_definition(
     _render_card(parent, node, theme=theme, kind="definition")
 
 
+def render_usage(
+    parent: ET.Element,
+    node: dict[str, Any],
+    *,
+    theme: SVGTheme = DEFAULT_THEME,
+) -> None:
+    _render_card(parent, node, theme=theme, kind="usage")
+
+
 def render_relationship(
     parent: ET.Element,
     node: dict[str, Any],
@@ -416,6 +482,43 @@ def render_relationship(
     theme: SVGTheme = DEFAULT_THEME,
 ) -> None:
     _render_card(parent, node, theme=theme, kind="relationship")
+
+
+def render_section(
+    parent: ET.Element,
+    node: dict[str, Any],
+    *,
+    theme: SVGTheme = DEFAULT_THEME,
+) -> None:
+    x = node["x"]
+    y = node["y"]
+    node_width = node["width"]
+    node_height = node["height"]
+    label = str(node.get("label", ""))
+    group = ET.SubElement(parent, "g")
+    draw_rect(
+        group,
+        x,
+        y,
+        node_width,
+        node_height,
+        theme=theme,
+        fill=theme.fill_for_kind("section"),
+        stroke=theme.stroke_for_kind("section"),
+        stroke_width=theme.stroke_width_for_kind("section"),
+        rx=theme.section_rx,
+        ry=theme.section_ry,
+    )
+    draw_text(
+        group,
+        x + SVG_CARD_LEFT_PADDING,
+        y + node_height - 6,
+        label,
+        font_family=theme.font_family_for_kind("section"),
+        font_size=theme.font_size_for_kind("section"),
+        font_weight="bold",
+        fill=SVG_SECONDARY_LABEL_COLOR,
+    )
 
 
 def render_statement(
@@ -451,6 +554,7 @@ def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEM
     )
 
     draw_background(svg, theme=theme, width=width, height=height)
+    _add_markers(svg, theme=theme)
     _draw_title(svg, title, theme=theme)
 
     for edge in edges:
@@ -462,9 +566,21 @@ def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEM
         y1 = source["y"] + source["height"]
         x2 = target["x"] + target["width"] / 2
         y2 = target["y"]
+        edge_kind = str(edge.get("kind", "sequence"))
         source_kind = str(source.get("kind", "statement"))
         target_kind = str(target.get("kind", "statement"))
-        dashed = source_kind == "relationship" or target_kind == "relationship"
+        dashed = (
+            edge_kind in {"sequence", "containment"}
+            or source_kind == "relationship"
+            or target_kind == "relationship"
+        )
+        marker_end = None
+        if edge_kind == "flow":
+            marker_end = f"url(#{SVG_ARROW_MARKER_ID})"
+        elif edge_kind == "containment":
+            marker_end = f"url(#{SVG_DIAMOND_MARKER_ID})"
+        elif dashed:
+            marker_end = f"url(#{SVG_ARROW_MARKER_ID})"
         draw_line(
             svg,
             x1,
@@ -473,7 +589,8 @@ def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEM
             y2,
             stroke=theme.relationship_stroke if dashed else SVG_DEFAULT_EDGE_STROKE,
             stroke_width=theme.relationship_stroke_width if dashed else SVG_DEFAULT_EDGE_STROKE_WIDTH,
-            dasharray=theme.relationship_dasharray if dashed else None,
+            dasharray=SVG_EDGE_DASHARRAY if dashed else None,
+            marker_end=marker_end,
         )
 
     for node in nodes:
@@ -482,8 +599,12 @@ def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEM
             render_package(svg, node, theme=theme)
         elif kind == "definition":
             render_definition(svg, node, theme=theme)
+        elif kind == "usage":
+            render_usage(svg, node, theme=theme)
         elif kind == "relationship":
             render_relationship(svg, node, theme=theme)
+        elif kind == "section":
+            render_section(svg, node, theme=theme)
         else:
             render_statement(svg, node, theme=theme)
 

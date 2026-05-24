@@ -187,6 +187,7 @@ def build_graphics_model_from_ast(document: SysMLDocument, sysml_code: str) -> d
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     content_y = 48
+    node_lookup: dict[str, str] = {}
 
     for index, item in enumerate(flat_nodes):
         kind = item["kind"]
@@ -194,6 +195,9 @@ def build_graphics_model_from_ast(document: SysMLDocument, sysml_code: str) -> d
         title = item["label"]
         secondary_label = item.get("secondary_label", "")
         documentation = item.get("documentation", "")
+        subtype = item.get("subtype", "")
+        node_key = item.get("node_key", "")
+        parent_key = item.get("parent_key", "")
 
         if kind == "package":
             width = 520
@@ -207,12 +211,24 @@ def build_graphics_model_from_ast(document: SysMLDocument, sysml_code: str) -> d
             x = 40
             y = content_y
             content_y += height + 24
+        elif kind == "usage":
+            width = min(340, max(240, 18 + len(title) * 7))
+            height = max(60, estimate_card_height(title, kind_tag, documentation, secondary_label, width) - 18)
+            x = 88
+            y = content_y
+            content_y += height + 16
         elif kind == "relationship":
             width = min(360, max(260, 18 + len(title) * 7))
             height = 56
             x = 72
             y = content_y
             content_y += height + 20
+        elif kind == "section":
+            width = 520
+            height = 26
+            x = 28
+            y = content_y
+            content_y += height + 8
         else:
             width = estimate_card_width(title, kind_tag, documentation, secondary_label)
             height = estimate_card_height(title, kind_tag, documentation, secondary_label, width)
@@ -225,7 +241,10 @@ def build_graphics_model_from_ast(document: SysMLDocument, sysml_code: str) -> d
             "label": title,
             "kind": kind,
             "kind_tag": kind_tag,
+            "subtype": subtype,
             "secondary_label": secondary_label,
+            "node_key": node_key,
+            "parent_key": parent_key,
             "x": x,
             "y": y,
             "width": width,
@@ -234,15 +253,33 @@ def build_graphics_model_from_ast(document: SysMLDocument, sysml_code: str) -> d
         if documentation:
             node["documentation"] = documentation
         nodes.append(node)
+        _register_node_lookup(node_lookup, node, item)
 
-        if index > 0:
+        parent_id = node_lookup.get(parent_key) if parent_key else None
+        if parent_id and parent_id != node["id"]:
             edges.append(
                 {
-                    "id": f"edge-{index - 1}-{index}",
-                    "source": f"node-{index - 1}",
-                    "target": f"node-{index}",
+                    "id": f"edge-{parent_id}-{node['id']}-{index}",
+                    "source": parent_id,
+                    "target": node["id"],
+                    "kind": "containment",
                 }
             )
+
+        flow_source = item.get("flow_source")
+        flow_target = item.get("flow_target")
+        if flow_source and flow_target:
+            source_id = _resolve_flow_endpoint(node_lookup, flow_source)
+            target_id = _resolve_flow_endpoint(node_lookup, flow_target)
+            if source_id and target_id:
+                edges.append(
+                    {
+                        "id": f"edge-{source_id}-{target_id}-{index}",
+                        "source": source_id,
+                        "target": target_id,
+                        "kind": "flow",
+                    }
+                )
 
     return {
         "type": "sysml-diagram",
@@ -260,14 +297,16 @@ def _flatten_ast(package: PackageNode) -> list[dict[str, str]]:
             "kind_tag": "package",
             "label": package.name,
             "documentation": package.documentation,
+            "node_key": _package_key(package.name),
+            "parent_key": "",
         }
     ]
     for member in package.members:
-        result.extend(_flatten_member(member))
+        result.extend(_flatten_member(member, owner_key=_package_key(package.name)))
     return result
 
 
-def _flatten_member(member: AstNode) -> list[dict[str, str]]:
+def _flatten_member(member: AstNode, *, owner_key: str) -> list[dict[str, str]]:
     if isinstance(member, DefinitionNode):
         rows = [
             {
@@ -275,54 +314,177 @@ def _flatten_member(member: AstNode) -> list[dict[str, str]]:
                 "kind_tag": f"{member.keyword} def",
                 "label": member.name,
                 "documentation": member.documentation,
+                "node_key": _definition_key(member.keyword, member.name, owner_key),
+                "parent_key": owner_key,
             }
         ]
-        for child in member.members:
-            rows.extend(_flatten_child(child, owner=member.name))
+        rows.extend(_flatten_definition_members(member, owner_key=rows[0]["node_key"]))
         return rows
     if isinstance(member, UsageNode):
-        return [_usage_row(member)]
+        return [_usage_row(member, owner_key=owner_key)]
     if isinstance(member, FlowNode):
-        return [_flow_row(member)]
+        return [_flow_row(member, owner_key=owner_key)]
     if isinstance(member, PackageNode):
         return _flatten_ast(member)
     if isinstance(member, UnknownNode):
-        return [{"kind": "statement", "kind_tag": "statement", "label": member.text, "documentation": ""}]
+        return [
+            {
+                "kind": "statement",
+                "kind_tag": "statement",
+                "label": member.text,
+                "documentation": "",
+                "node_key": _statement_key(member.text, owner_key),
+                "parent_key": owner_key,
+            }
+        ]
     return []
 
 
 def _flatten_child(child: AstNode, *, owner: str) -> list[dict[str, str]]:
     if isinstance(child, UsageNode):
-        row = _usage_row(child)
+        row = _usage_row(child, owner_key=owner)
         row["secondary_label"] = f"{owner} / : {child.type_name}"
         return [row]
     if isinstance(child, FlowNode):
-        return [_flow_row(child)]
+        return [_flow_row(child, owner_key=owner)]
     if isinstance(child, DefinitionNode):
-        return _flatten_member(child)
+        return _flatten_member(child, owner_key=owner)
     if isinstance(child, UnknownNode):
-        return [{"kind": "statement", "kind_tag": "statement", "label": child.text, "documentation": ""}]
+        return [
+            {
+                "kind": "statement",
+                "kind_tag": "statement",
+                "label": child.text,
+                "documentation": "",
+                "node_key": _statement_key(child.text, owner),
+                "parent_key": owner,
+            }
+        ]
     return []
 
 
-def _usage_row(node: UsageNode) -> dict[str, str]:
+def _flatten_definition_members(member: DefinitionNode, *, owner_key: str) -> list[dict[str, str]]:
+    groups: list[tuple[str, list[dict[str, str]]]] = [
+        ("Ports", []),
+        ("Parts", []),
+        ("Flows", []),
+        ("Members", []),
+    ]
+
+    for child in member.members:
+        if isinstance(child, UsageNode) and child.keyword == "port":
+            groups[0][1].append(_usage_row(child, owner_key=_section_key(owner_key, "Ports")))
+            continue
+        if isinstance(child, UsageNode) and child.keyword == "part":
+            groups[1][1].append(_usage_row(child, owner_key=_section_key(owner_key, "Parts")))
+            continue
+        if isinstance(child, FlowNode):
+            groups[2][1].append(_flow_row(child, owner_key=_section_key(owner_key, "Flows")))
+            continue
+        groups[3][1].extend(_flatten_child(child, owner=owner_key))
+
+    rows: list[dict[str, str]] = []
+    for label, group_rows in groups:
+        if not group_rows:
+            continue
+        if label != "Members":
+            section_key = _section_key(owner_key, label)
+            rows.append(
+                {
+                    "kind": "section",
+                    "kind_tag": "section",
+                    "label": label,
+                    "documentation": "",
+                    "node_key": section_key,
+                    "parent_key": owner_key,
+                }
+            )
+            for row in group_rows:
+                row["parent_key"] = section_key
+        rows.extend(group_rows)
+    return rows
+
+
+def _usage_row(node: UsageNode, *, owner_key: str) -> dict[str, str]:
     return {
-        "kind": "definition",
+        "kind": "usage",
         "kind_tag": node.keyword,
         "label": node.name,
         "secondary_label": f": {node.type_name}",
         "documentation": node.documentation,
+        "subtype": node.keyword,
+        "node_key": _usage_key(node.keyword, node.name, owner_key),
+        "parent_key": owner_key,
     }
 
 
-def _flow_row(node: FlowNode) -> dict[str, str]:
+def _flow_row(node: FlowNode, *, owner_key: str) -> dict[str, str]:
     return {
         "kind": "relationship",
         "kind_tag": "flow",
         "label": node.item_type,
         "secondary_label": f"{node.source} -> {node.target}",
         "documentation": "",
+        "flow_source": node.source,
+        "flow_target": node.target,
+        "node_key": _flow_key(node.item_type, node.source, node.target, owner_key),
+        "parent_key": owner_key,
     }
+
+
+def _register_node_lookup(node_lookup: dict[str, str], node: dict[str, Any], item: dict[str, str]) -> None:
+    label = str(node.get("label", ""))
+    kind = str(node.get("kind", ""))
+    node_id = str(node["id"])
+    node_key = str(node.get("node_key", ""))
+    if label:
+        node_lookup[label] = node_id
+    if kind in {"definition", "package"}:
+        node_lookup.setdefault(label, node_id)
+    if node_key:
+        node_lookup.setdefault(node_key, node_id)
+    secondary_label = str(node.get("secondary_label", ""))
+    if secondary_label.startswith(": "):
+        node_lookup.setdefault(secondary_label[2:], node_id)
+    flow_source = item.get("flow_source")
+    flow_target = item.get("flow_target")
+    if flow_source:
+        node_lookup.setdefault(flow_source, node_id)
+    if flow_target:
+        node_lookup.setdefault(flow_target, node_id)
+
+
+def _resolve_flow_endpoint(node_lookup: dict[str, str], endpoint: str) -> str | None:
+    if endpoint in node_lookup:
+        return node_lookup[endpoint]
+    if "." in endpoint:
+        tail = endpoint.rsplit(".", maxsplit=1)[-1]
+        return node_lookup.get(tail)
+    return None
+
+
+def _package_key(name: str) -> str:
+    return f"package:{name}"
+
+
+def _definition_key(keyword: str, name: str, owner_key: str) -> str:
+    return f"{owner_key}/definition:{keyword}:{name}"
+
+
+def _section_key(owner_key: str, label: str) -> str:
+    return f"{owner_key}/section:{label}"
+
+
+def _usage_key(keyword: str, name: str, owner_key: str) -> str:
+    return f"{owner_key}/usage:{keyword}:{name}"
+
+
+def _flow_key(item_type: str, source: str, target: str, owner_key: str) -> str:
+    return f"{owner_key}/flow:{item_type}:{source}->{target}"
+
+
+def _statement_key(text: str, owner_key: str) -> str:
+    return f"{owner_key}/statement:{text}"
 
 
 def build_graphics_model(sysml_code: str) -> dict[str, Any]:
@@ -436,11 +598,13 @@ def _build_graphics_model_from_statements(sysml_code: str) -> dict[str, Any]:
         if statement_docs[index]:
             nodes[-1]["documentation"] = statement_docs[index]
         if index > 0:
+            previous_kind = str(nodes[-2]["kind"]) if len(nodes) > 1 else "package"
             edges.append(
                 {
                     "id": f"edge-{index - 1}-{index}",
                     "source": f"node-{index - 1}",
                     "target": f"node-{index}",
+                    "kind": "containment" if previous_kind == "package" else "sequence",
                 }
             )
 

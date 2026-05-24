@@ -61,9 +61,20 @@ def test_svg_structure_snapshot_style() -> None:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     rects = root.findall(".//svg:rect", ns)
     assert rects[1].attrib["width"] == "520"
-    relationship_rect = rects[3].attrib
-    assert relationship_rect["stroke-dasharray"] == "6 4"
-    assert relationship_rect["fill"] == "#f8fafc"
+    relationship_rect = next(
+        rect.attrib for rect in rects if rect.attrib.get("fill") == "#f8fafc" and rect.attrib.get("stroke-dasharray") == "6 4"
+    )
+    assert relationship_rect["stroke"] == "#64748b"
+
+
+def test_section_headers_render_as_group_labels() -> None:
+    model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
+    svg = graphics_to_svg(model)
+
+    assert "Ports" in svg
+    assert "Parts" in svg
+    assert "Flows" in svg
+    assert "fill=\"#eef2ff\"" in svg
 
 
 def test_svg_primitives_use_defaults() -> None:
@@ -208,11 +219,34 @@ def test_graphics_model_uses_ast_for_pla_model() -> None:
     model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
     labels = {node["label"] for node in model["nodes"]}
     flow_nodes = [node for node in model["nodes"] if node["kind"] == "relationship"]
+    usage_nodes = [node for node in model["nodes"] if node["kind"] == "usage"]
+    edges = model["edges"]
 
     assert model["title"] == "AirborneSoftwarePLA"
     assert "ProcessLifecycleAgent" in labels
     assert "perception" in labels
     assert "airborneSystem" in labels
     assert len(flow_nodes) == 16
+    assert len(usage_nodes) >= 19
+    assert len(edges) >= 16
     assert all("flow of" not in node["label"].lower() for node in flow_nodes)
     assert any(node["secondary_label"] == "constraintIn -> perception.constraintIn" for node in flow_nodes)
+    assert any(edge["source"] != edge["target"] for edge in edges)
+
+
+def test_usage_nodes_use_lighter_visual_style() -> None:
+    model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
+    svg = graphics_to_svg(model)
+
+    assert "fill=\"#f8fbff\"" in svg
+    assert "stroke=\"#60a5fa\"" in svg
+    assert "fill=\"#dbeafe\"" in svg
+
+
+def test_relationship_lines_use_markers() -> None:
+    model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
+    svg = graphics_to_svg(model)
+
+    assert "marker-end=\"url(#arrow-head)\"" in svg
+    assert "marker-end=\"url(#diamond-head)\"" in svg
+    assert "stroke-dasharray=\"8 5\"" in svg
