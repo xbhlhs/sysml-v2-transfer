@@ -40,7 +40,7 @@ def code_to_graphics_cmd(
     except Exception as exc:
         raise typer.BadParameter(f"转换失败：{exc}") from exc
 
-    result = output or Path("output-graphics.svg")
+    result = output or _default_svg_output_path(input_value, raw=raw)
     try:
         result.parent.mkdir(parents=True, exist_ok=True)
         result.write_text(svg, encoding="utf-8")
@@ -67,6 +67,13 @@ def gui_cmd() -> None:
     """启动集成 GUI。"""
     print("[blue]正在启动 GUI...")
     run_gui()
+
+
+def _default_svg_output_path(input_value: str, *, raw: bool) -> Path:
+    if raw:
+        return Path("output-graphics.svg")
+    input_path = Path(input_value)
+    return input_path.with_name(f"{input_path.stem}-def-view.svg")
 
 
 if __name__ == "__main__":

@@ -457,6 +457,43 @@ def render_package(parent: ET.Element, node: dict[str, Any], *, theme: SVGTheme 
     _render_card(parent, node, theme=theme, kind="package", package_style=True)
 
 
+def _render_text_row(
+    parent: ET.Element,
+    node: dict[str, Any],
+    *,
+    theme: SVGTheme = DEFAULT_THEME,
+    kind: str,
+) -> None:
+    x = node["x"]
+    y = node["y"]
+    label = str(node.get("label", ""))
+    secondary_label = str(node.get("secondary_label", "")).strip()
+    documentation = str(node.get("documentation", "")).strip()
+    group = ET.SubElement(parent, "g")
+    _add_documentation(group, node)
+    row_text = f"{label}{secondary_label}" if kind == "usage" else f"{label} {secondary_label}".strip()
+    draw_text(
+        group,
+        x + SVG_CARD_LEFT_PADDING,
+        y + 18,
+        row_text,
+        font_family=theme.font_family_for_kind(kind),
+        font_size=theme.font_size_for_kind(kind),
+        font_weight="normal",
+        fill=theme.stroke_for_kind(kind),
+    )
+    if documentation:
+        draw_text(
+            group,
+            x + SVG_CARD_LEFT_PADDING,
+            y + 34,
+            documentation,
+            font_family=theme.font_family_for_kind(kind),
+            font_size=SVG_DOC_BODY_FONT_SIZE_REDUCED,
+            fill=SVG_DOC_BODY_COLOR_DIM,
+        )
+
+
 def render_definition(
     parent: ET.Element,
     node: dict[str, Any],
@@ -472,7 +509,7 @@ def render_usage(
     *,
     theme: SVGTheme = DEFAULT_THEME,
 ) -> None:
-    _render_card(parent, node, theme=theme, kind="usage")
+    _render_text_row(parent, node, theme=theme, kind="usage")
 
 
 def render_relationship(
@@ -481,7 +518,7 @@ def render_relationship(
     *,
     theme: SVGTheme = DEFAULT_THEME,
 ) -> None:
-    _render_card(parent, node, theme=theme, kind="relationship")
+    _render_text_row(parent, node, theme=theme, kind="relationship")
 
 
 def render_section(
@@ -493,31 +530,27 @@ def render_section(
     x = node["x"]
     y = node["y"]
     node_width = node["width"]
-    node_height = node["height"]
     label = str(node.get("label", ""))
     group = ET.SubElement(parent, "g")
-    draw_rect(
-        group,
-        x,
-        y,
-        node_width,
-        node_height,
-        theme=theme,
-        fill=theme.fill_for_kind("section"),
-        stroke=theme.stroke_for_kind("section"),
-        stroke_width=theme.stroke_width_for_kind("section"),
-        rx=theme.section_rx,
-        ry=theme.section_ry,
-    )
     draw_text(
         group,
         x + SVG_CARD_LEFT_PADDING,
-        y + node_height - 6,
+        y + 16,
         label,
         font_family=theme.font_family_for_kind("section"),
         font_size=theme.font_size_for_kind("section"),
         font_weight="bold",
         fill=SVG_SECONDARY_LABEL_COLOR,
+    )
+    draw_line(
+        group,
+        x + 8,
+        y + 24,
+        x + node_width - 8,
+        y + 24,
+        stroke=theme.stroke_for_kind("section"),
+        stroke_width=theme.stroke_width_for_kind("section"),
+        dasharray="4 4",
     )
 
 
@@ -533,9 +566,10 @@ def render_statement(
 def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEME) -> str:
     nodes = graphics_model.get("nodes", [])
     edges = graphics_model.get("edges", [])
-    width = theme.canvas_width
     title = str(graphics_model.get("title", "SysML v2 Transfer"))
+    max_right = max((float(node["x"]) + float(node["width"]) for node in nodes), default=0.0)
     max_bottom = max((float(node["y"]) + float(node["height"]) for node in nodes), default=0.0)
+    width = max(theme.canvas_width, int(max_right + SVG_LAYOUT_BOTTOM_PADDING))
     height = max(
         theme.canvas_min_height,
         int(max_bottom + SVG_LAYOUT_BOTTOM_PADDING),
@@ -557,47 +591,11 @@ def render_svg(graphics_model: dict[str, Any], *, theme: SVGTheme = DEFAULT_THEM
     _add_markers(svg, theme=theme)
     _draw_title(svg, title, theme=theme)
 
-    for edge in edges:
-        source = node_index.get(edge.get("source"))
-        target = node_index.get(edge.get("target"))
-        if not source or not target:
-            continue
-        x1 = source["x"] + source["width"] / 2
-        y1 = source["y"] + source["height"]
-        x2 = target["x"] + target["width"] / 2
-        y2 = target["y"]
-        edge_kind = str(edge.get("kind", "sequence"))
-        source_kind = str(source.get("kind", "statement"))
-        target_kind = str(target.get("kind", "statement"))
-        dashed = (
-            edge_kind in {"sequence", "containment"}
-            or source_kind == "relationship"
-            or target_kind == "relationship"
-        )
-        marker_end = None
-        if edge_kind == "flow":
-            marker_end = f"url(#{SVG_ARROW_MARKER_ID})"
-        elif edge_kind == "containment":
-            marker_end = f"url(#{SVG_DIAMOND_MARKER_ID})"
-        elif dashed:
-            marker_end = f"url(#{SVG_ARROW_MARKER_ID})"
-        draw_line(
-            svg,
-            x1,
-            y1,
-            x2,
-            y2,
-            stroke=theme.relationship_stroke if dashed else SVG_DEFAULT_EDGE_STROKE,
-            stroke_width=theme.relationship_stroke_width if dashed else SVG_DEFAULT_EDGE_STROKE_WIDTH,
-            dasharray=SVG_EDGE_DASHARRAY if dashed else None,
-            marker_end=marker_end,
-        )
-
     for node in nodes:
         kind = str(node.get("kind", "statement"))
         if kind == "package":
-            render_package(svg, node, theme=theme)
-        elif kind == "definition":
+            continue
+        if kind == "definition":
             render_definition(svg, node, theme=theme)
         elif kind == "usage":
             render_usage(svg, node, theme=theme)

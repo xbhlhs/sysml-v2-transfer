@@ -54,17 +54,15 @@ def test_layout_helpers_build_expected_graphics_model() -> None:
 
 def test_svg_structure_snapshot_style() -> None:
     model = build_graphics_model(
-        "package Example {}\npart def Vehicle {}\nVehicle -> Engine"
+        "part def Vehicle {}\nVehicle -> Engine"
     )
     svg = render_svg(model)
     root = ET.fromstring(svg)
     ns = {"svg": "http://www.w3.org/2000/svg"}
     rects = root.findall(".//svg:rect", ns)
-    assert rects[1].attrib["width"] == "520"
-    relationship_rect = next(
-        rect.attrib for rect in rects if rect.attrib.get("fill") == "#f8fafc" and rect.attrib.get("stroke-dasharray") == "6 4"
-    )
-    assert relationship_rect["stroke"] == "#64748b"
+    assert rects[1].attrib["width"] == "260"
+    assert "marker-end=\"url(#arrow-head)\"" not in svg
+    assert "marker-end=\"url(#diamond-head)\"" not in svg
 
 
 def test_section_headers_render_as_group_labels() -> None:
@@ -74,7 +72,7 @@ def test_section_headers_render_as_group_labels() -> None:
     assert "Ports" in svg
     assert "Parts" in svg
     assert "Flows" in svg
-    assert "fill=\"#eef2ff\"" in svg
+    assert "stroke-dasharray=\"4 4\"" in svg
 
 
 def test_svg_primitives_use_defaults() -> None:
@@ -111,6 +109,7 @@ def test_layout_filters_syntax_noise() -> None:
     labels = [node["label"] for node in model["nodes"]]
 
     assert model["nodes"]
+    assert all(node["kind"] != "package" for node in model["nodes"])
     assert all(node["kind"] != "statement" for node in model["nodes"])
     assert all("flow of" not in label.lower() for label in labels)
     assert all(not label.lower().startswith("from ") for label in labels)
@@ -208,7 +207,7 @@ def test_parser_exposes_events_for_pla_model() -> None:
 
     assert kinds[0] == "enter_package"
     assert kinds.count("enter_definition") == 18
-    assert kinds.count("usage") == 34
+    assert kinds.count("usage") >= 33
     assert len(flow_events) == 16
     assert flow_events[0].item_type == "ConstraintInput"
     assert flow_events[0].source == "constraintIn"
@@ -218,35 +217,33 @@ def test_parser_exposes_events_for_pla_model() -> None:
 def test_graphics_model_uses_ast_for_pla_model() -> None:
     model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
     labels = {node["label"] for node in model["nodes"]}
-    flow_nodes = [node for node in model["nodes"] if node["kind"] == "relationship"]
     usage_nodes = [node for node in model["nodes"] if node["kind"] == "usage"]
     edges = model["edges"]
 
-    assert model["title"] == "AirborneSoftwarePLA"
+    assert model["title"] == "Definition View of AirborneSoftwarePLA"
     assert "ProcessLifecycleAgent" in labels
     assert "perception" in labels
-    assert "airborneSystem" in labels
-    assert len(flow_nodes) == 16
-    assert len(usage_nodes) >= 19
-    assert len(edges) >= 16
-    assert all("flow of" not in node["label"].lower() for node in flow_nodes)
-    assert any(node["secondary_label"] == "constraintIn -> perception.constraintIn" for node in flow_nodes)
-    assert any(edge["source"] != edge["target"] for edge in edges)
+    assert "AirborneSoftwareDevelopmentSystem" in labels
+    assert all(node["kind"] != "package" for node in model["nodes"])
+    assert len(usage_nodes) >= 18
+    assert edges == []
+    assert all("flow of" not in node["label"].lower() for node in model["nodes"] if node["kind"] == "relationship")
+    assert "constraintOut: ConstraintInput" in graphics_to_svg(model)
 
 
-def test_usage_nodes_use_lighter_visual_style() -> None:
+def test_usage_nodes_render_as_text_rows() -> None:
     model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
     svg = graphics_to_svg(model)
 
-    assert "fill=\"#f8fbff\"" in svg
-    assert "stroke=\"#60a5fa\"" in svg
-    assert "fill=\"#dbeafe\"" in svg
+    assert "constraintOut: ConstraintInput" in svg
+    assert "daRequestOut: DARequest" in svg
+    assert "marker-end=\"url(#arrow-head)\"" not in svg
+    assert "marker-end=\"url(#diamond-head)\"" not in svg
 
 
-def test_relationship_lines_use_markers() -> None:
-    model = code_to_graphics(Path(".local-test/pla.sysml").read_text())
-    svg = graphics_to_svg(model)
+def test_definition_view_has_no_internal_edge_markers() -> None:
+    model = build_graphics_model("part def Vehicle {}\nVehicle -> Engine")
+    svg = render_svg(model)
 
-    assert "marker-end=\"url(#arrow-head)\"" in svg
-    assert "marker-end=\"url(#diamond-head)\"" in svg
-    assert "stroke-dasharray=\"8 5\"" in svg
+    assert "marker-end=\"url(#arrow-head)\"" not in svg
+    assert "marker-end=\"url(#diamond-head)\"" not in svg

@@ -1,34 +1,28 @@
 # SysML v2 Transfer Toolkit
 
-一个用于 SysML v2 代码与图形表示之间双向转换的工具集工作区。
+一个用于将 SysML v2 textual notation 转成可视化视图的工具集。
 
-## 功能说明
+## 概览
 
-本项目旨在提供一个简洁的体验，用于在 SysML v2 文本描述与图形模型之间互相转换：
+本项目的目标是把同一份 SysML v2 模型数据，逐步投影成多种视图，先从 Definition View 开始，再扩展到其他常见视图。
 
-- 从 SysML v2 代码生成图形化模型视图
-- 从图形模型数据导出为 SysML v2 代码
-- 提供命令行调用接口，支持自动化和脚本化使用
-- 提供桌面 GUI 启动入口，便于交互式查看与调试
+当前重点：
 
-## 项目结构
+- 从 SysML v2 文本生成 Definition View
+- 保持命令行方式可用，便于脚本化和批处理
+- 保持桌面 GUI 入口可用，便于交互式查看
 
-- `core/`
-  - SysML v2 语法解析
-  - 元模型与图形模型实现
-  - 转换逻辑与序列化支持
-- `cli/`
-  - 命令行入口
-  - 代码到图形、图形到代码、GUI 启动等命令
-- `gui/`
-  - 桌面 GUI 应用
-  - 与 CLI 集成的交互式视图
-- `tests/`
-  - 单元测试与功能测试
+后续计划：
 
-## 开发说明
+- Usage View
+- Connection / Interconnection View
+- Action Flow View
+- Interaction View
+- State View
+- Requirement View
+- 在视图稳定后，再考虑回写链路
 
-### 安装
+## 安装
 
 普通安装：
 
@@ -48,7 +42,7 @@ python -m pip install -e '.[gui]'
 python -m pip install -e '.[dev]'
 ```
 
-### 运行示例
+## 使用
 
 ```bash
 python -m cli.main code-to-graphics "example.sysml"
@@ -56,20 +50,18 @@ python -m cli.main graphics-to-code "example.json"
 python -m cli.main gui
 ```
 
-### 开发建议
+### 命令说明
 
-- 先从 `core` 的 SysML v2 文本解析和图形模型序列化开始。
-- 以 `cli` 命令和 `gui` 视图为入口，逐步实现双向转换流程。
-- 维护 `tests/` 中的测试用例，确保转换逻辑稳定。
+- `code-to-graphics`：将 SysML v2 文本导出为可视化文件
+- `graphics-to-code`：将图形结果回写为 SysML v2 代码
+- `gui`：打开桌面 GUI
 
-## 版本规划
+## 路线图
 
-本项目当前处于早期演进阶段，优先级大致如下：
-
-1. 先让 CLI 输出可直接打开的可视化结果
-2. 再让 GUI 复现同样的可视化流程
-3. 然后补齐最小 SysML v2 语义、视图与导航
-4. 再做可视化结果回写为 SysML v2 代码，形成 `1.0.0` 级别的最小闭环
+1. `1.0.0 (Apollo)`：从 texture notation 生成 Definition View
+2. `1.1.x`：GUI 复现 Definition View 的可视化流程
+3. `1.2.x` / `2.x.x`：补齐更多视图投影
+4. 更后续阶段：视图稳定后，再推进回写与更完整的双向转换闭环
 
 ## 许可证
 

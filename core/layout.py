@@ -171,6 +171,15 @@ def estimate_card_height(
     return max(72, height)
 
 
+def estimate_row_height(text: str, width: int) -> int:
+    chars_per_line = max(18, (width - 28) // 7)
+    lines = wrap_text(text, chars_per_line)
+    height = 10
+    height += len(lines) * 18
+    height += 8
+    return max(26, height)
+
+
 def extract_title(statements: list[str]) -> str:
     for statement in statements:
         if statement.lower().startswith("package "):
@@ -184,110 +193,357 @@ def build_graphics_model_from_ast(document: SysMLDocument, sysml_code: str) -> d
         return _build_graphics_model_from_statements(sysml_code)
 
     flat_nodes = _flatten_ast(document.package)
+    children_by_parent_key: dict[str, list[dict[str, str]]] = {}
+    for row in flat_nodes[1:]:
+        children_by_parent_key.setdefault(str(row.get("parent_key", "")), []).append(row)
+
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
-    content_y = 48
     node_lookup: dict[str, str] = {}
 
-    for index, item in enumerate(flat_nodes):
-        kind = item["kind"]
-        kind_tag = item["kind_tag"]
-        title = item["label"]
-        secondary_label = item.get("secondary_label", "")
-        documentation = item.get("documentation", "")
-        subtype = item.get("subtype", "")
-        node_key = item.get("node_key", "")
-        parent_key = item.get("parent_key", "")
+    package_row = flat_nodes[0]
+    view_title = package_row["label"]
+    content_y = 64
+    content_y = _layout_rows(
+        children_by_parent_key,
+        parent_key=str(package_row["node_key"]),
+        parent_id="",
+        x=40,
+        y=content_y,
+        width_limit=500,
+        nodes=nodes,
+        node_lookup=node_lookup,
+        edges=edges,
+    )
 
-        if kind == "package":
-            width = 520
-            height = estimate_package_height(title, width)
-            x = 20
-            y = 48
-            content_y = y + height + 32
-        elif kind == "definition":
-            width = estimate_card_width(title, kind_tag, documentation, secondary_label)
+    _reflow_top_level_groups(nodes, view_title, node_lookup)
+    edges = []
+
+    return {
+        "type": "sysml-diagram",
+        "content": sysml_code,
+        "title": f"Definition View of {view_title}",
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def _layout_rows(
+    children_by_parent_key: dict[str, list[dict[str, str]]],
+    *,
+    parent_key: str,
+    parent_id: str,
+    x: int,
+    y: int,
+    width_limit: int,
+    nodes: list[dict[str, Any]],
+    node_lookup: dict[str, str],
+    edges: list[dict[str, Any]],
+) -> int:
+    cursor_y = y
+    for row in children_by_parent_key.get(parent_key, []):
+        kind = row["kind"]
+        kind_tag = row["kind_tag"]
+        title = row["label"]
+        secondary_label = row.get("secondary_label", "")
+        documentation = row.get("documentation", "")
+        node_key = row.get("node_key", "")
+        row_parent_key = row.get("parent_key", "")
+        node_id = f"node-{len(nodes)}"
+
+        if kind == "definition":
+            width = min(width_limit, max(360, estimate_card_width(title, kind_tag, documentation, secondary_label)))
             height = estimate_card_height(title, kind_tag, documentation, secondary_label, width)
-            x = 40
-            y = content_y
-            content_y += height + 24
-        elif kind == "usage":
-            width = min(340, max(240, 18 + len(title) * 7))
-            height = max(60, estimate_card_height(title, kind_tag, documentation, secondary_label, width) - 18)
-            x = 88
-            y = content_y
-            content_y += height + 16
-        elif kind == "relationship":
-            width = min(360, max(260, 18 + len(title) * 7))
-            height = 56
-            x = 72
-            y = content_y
-            content_y += height + 20
-        elif kind == "section":
-            width = 520
+            node_x = x
+            node_y = cursor_y
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": node_x,
+                "y": node_y,
+                "width": width,
+                "height": height,
+            }
+            if documentation:
+                node["documentation"] = documentation
+            nodes.append(node)
+            _register_node_lookup(node_lookup, node, row)
+            if parent_id and parent_id != node_id:
+                edges.append(
+                    {
+                        "id": f"edge-{parent_id}-{node_id}",
+                        "source": parent_id,
+                        "target": node_id,
+                        "kind": "containment",
+                    }
+                )
+
+            child_start_y = node_y + height + 14
+            child_end_y = _layout_rows(
+                children_by_parent_key,
+                parent_key=node_key,
+                parent_id=node_id,
+                x=node_x + 24,
+                y=child_start_y,
+                width_limit=max(240, width - 36),
+                nodes=nodes,
+                node_lookup=node_lookup,
+                edges=edges,
+            )
+            node["height"] = max(height, child_end_y - node_y + 12)
+            cursor_y = node_y + node["height"] + 20
+            continue
+
+        if kind == "section":
+            width = min(width_limit, 520)
             height = 26
-            x = 28
-            y = content_y
-            content_y += height + 8
-        else:
-            width = estimate_card_width(title, kind_tag, documentation, secondary_label)
-            height = estimate_card_height(title, kind_tag, documentation, secondary_label, width)
-            x = 40
-            y = content_y
-            content_y += height + 20
+            node_x = x
+            node_y = cursor_y
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": node_x,
+                "y": node_y,
+                "width": width,
+                "height": height,
+            }
+            nodes.append(node)
+            _register_node_lookup(node_lookup, node, row)
+            if parent_id and parent_id != node_id:
+                edges.append(
+                    {
+                        "id": f"edge-{parent_id}-{node_id}",
+                        "source": parent_id,
+                        "target": node_id,
+                        "kind": "containment",
+                    }
+                )
 
+            child_rows = children_by_parent_key.get(node_key, [])
+            if child_rows and all(child_row.get("kind") in {"usage", "relationship", "statement"} for child_row in child_rows):
+                child_end_y = _layout_section_children_grid(
+                    child_rows,
+                    parent_key=node_key,
+                    parent_id=node_id,
+                    x=node_x + 12,
+                    y=node_y + height + 8,
+                    width_limit=max(220, width - 24),
+                    nodes=nodes,
+                    node_lookup=node_lookup,
+                    edges=edges,
+                )
+            else:
+                child_end_y = _layout_rows(
+                    children_by_parent_key,
+                    parent_key=node_key,
+                    parent_id=node_id,
+                    x=node_x + 18,
+                    y=node_y + height + 8,
+                    width_limit=max(220, width - 24),
+                    nodes=nodes,
+                    node_lookup=node_lookup,
+                    edges=edges,
+                )
+            node["height"] = height
+            cursor_y = child_end_y + 8
+            continue
+
+        if kind == "usage":
+            row_text = f"{title}{secondary_label}"
+            width = min(width_limit, max(260, 18 + len(row_text) * 7))
+            height = estimate_row_height(row_text, width)
+            node_x = x
+            node_y = cursor_y
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "subtype": row.get("subtype", ""),
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": node_x,
+                "y": node_y,
+                "width": width,
+                "height": height,
+            }
+            if documentation:
+                node["documentation"] = documentation
+            nodes.append(node)
+            _register_node_lookup(node_lookup, node, row)
+            cursor_y = node_y + height + 8
+            continue
+
+        if kind == "relationship":
+            row_text = f"{title} {secondary_label}".strip()
+            width = min(width_limit, max(260, 18 + len(row_text) * 7))
+            height = estimate_row_height(row_text, width)
+            node_x = x
+            node_y = cursor_y
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": node_x,
+                "y": node_y,
+                "width": width,
+                "height": height,
+                "flow_source": row.get("flow_source", ""),
+                "flow_target": row.get("flow_target", ""),
+            }
+            if documentation:
+                node["documentation"] = documentation
+            nodes.append(node)
+            _register_node_lookup(node_lookup, node, row)
+            cursor_y = node_y + height + 8
+            continue
+
+        width = min(width_limit, max(260, 18 + len(title) * 7))
+        height = estimate_card_height(title, kind_tag, documentation, secondary_label, width)
+        node_x = x
+        node_y = cursor_y
         node = {
-            "id": f"node-{index}",
+            "id": node_id,
             "label": title,
             "kind": kind,
             "kind_tag": kind_tag,
-            "subtype": subtype,
             "secondary_label": secondary_label,
             "node_key": node_key,
-            "parent_key": parent_key,
-            "x": x,
-            "y": y,
+            "parent_key": row_parent_key,
+            "x": node_x,
+            "y": node_y,
             "width": width,
             "height": height,
         }
         if documentation:
             node["documentation"] = documentation
         nodes.append(node)
-        _register_node_lookup(node_lookup, node, item)
-
-        parent_id = node_lookup.get(parent_key) if parent_key else None
-        if parent_id and parent_id != node["id"]:
+        _register_node_lookup(node_lookup, node, row)
+        if parent_id and parent_id != node_id:
             edges.append(
                 {
-                    "id": f"edge-{parent_id}-{node['id']}-{index}",
+                    "id": f"edge-{parent_id}-{node_id}",
                     "source": parent_id,
-                    "target": node["id"],
+                    "target": node_id,
                     "kind": "containment",
                 }
             )
+        cursor_y = node_y + height + 16
 
-        flow_source = item.get("flow_source")
-        flow_target = item.get("flow_target")
-        if flow_source and flow_target:
-            source_id = _resolve_flow_endpoint(node_lookup, flow_source)
-            target_id = _resolve_flow_endpoint(node_lookup, flow_target)
-            if source_id and target_id:
-                edges.append(
-                    {
-                        "id": f"edge-{source_id}-{target_id}-{index}",
-                        "source": source_id,
-                        "target": target_id,
-                        "kind": "flow",
-                    }
-                )
+    return cursor_y
 
-    return {
-        "type": "sysml-diagram",
-        "content": sysml_code,
-        "title": document.package.name,
-        "nodes": nodes,
-        "edges": edges,
-    }
+
+def _layout_section_children_grid(
+    child_rows: list[dict[str, str]],
+    *,
+    parent_key: str,
+    parent_id: str,
+    x: int,
+    y: int,
+    width_limit: int,
+    nodes: list[dict[str, Any]],
+    node_lookup: dict[str, str],
+    edges: list[dict[str, Any]],
+) -> int:
+    if not child_rows:
+        return y
+
+    built_nodes: list[dict[str, Any]] = []
+    for row in child_rows:
+        kind = row["kind"]
+        kind_tag = row["kind_tag"]
+        title = row["label"]
+        secondary_label = row.get("secondary_label", "")
+        documentation = row.get("documentation", "")
+        node_key = row.get("node_key", "")
+        row_parent_key = row.get("parent_key", parent_key)
+        node_id = f"node-{len(nodes)}"
+        row_text = f"{title}{secondary_label}" if kind == "usage" else f"{title} {secondary_label}".strip()
+
+        if kind == "usage":
+            width = max(260, width_limit - 24)
+            height = estimate_row_height(row_text, width)
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "subtype": row.get("subtype", ""),
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+            }
+            if documentation:
+                node["documentation"] = documentation
+        elif kind == "relationship":
+            width = max(260, width_limit - 24)
+            height = estimate_row_height(row_text, width)
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "flow_source": row.get("flow_source", ""),
+                "flow_target": row.get("flow_target", ""),
+            }
+            if documentation:
+                node["documentation"] = documentation
+        else:
+            width = max(260, width_limit - 24)
+            height = estimate_row_height(row_text, width)
+            node = {
+                "id": node_id,
+                "label": title,
+                "kind": kind,
+                "kind_tag": kind_tag,
+                "secondary_label": secondary_label,
+                "node_key": node_key,
+                "parent_key": row_parent_key,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+            }
+            if documentation:
+                node["documentation"] = documentation
+
+        nodes.append(node)
+        _register_node_lookup(node_lookup, node, row)
+        built_nodes.append(node)
+    cursor_y = float(y)
+    row_gap = 6.0
+    for node in built_nodes:
+        node["x"] = float(x)
+        node["y"] = cursor_y
+        cursor_y += float(node["height"]) + row_gap
+
+    return int(cursor_y)
 
 
 def _flatten_ast(package: PackageNode) -> list[dict[str, str]]:
@@ -485,6 +741,77 @@ def _flow_key(item_type: str, source: str, target: str, owner_key: str) -> str:
 
 def _statement_key(text: str, owner_key: str) -> str:
     return f"{owner_key}/statement:{text}"
+
+
+def _top_level_family_label(kind_tag: str, kind: str) -> str:
+    if kind == "usage":
+        return "Usages"
+    lowered = kind_tag.lower()
+    if lowered.startswith(("item def", "part def", "port def", "action def", "state def", "connection def")):
+        base = lowered.split()[0]
+        return {
+            "item": "Item Definitions",
+            "part": "Part Definitions",
+            "port": "Port Definitions",
+            "action": "Action Definitions",
+            "state": "State Definitions",
+            "connection": "Connection Definitions",
+        }.get(base, "Definitions")
+    return "Other Elements"
+
+
+def _reflow_top_level_groups(
+    nodes: list[dict[str, Any]],
+    package_title: str,
+    node_lookup: dict[str, str],
+) -> None:
+    _ = package_title
+    if not nodes:
+        return
+
+    child_map: dict[str, list[dict[str, Any]]] = {}
+    for node in nodes:
+        parent_key = str(node.get("parent_key", ""))
+        if parent_key:
+            child_map.setdefault(parent_key, []).append(node)
+
+    package_key = f"package:{package_title}"
+    top_level_rows = [
+        node
+        for node in nodes
+        if str(node.get("parent_key", "")) == package_key and node.get("kind") in {"definition", "usage"}
+    ]
+    if not top_level_rows:
+        return
+
+    def descendants(root_key: str) -> list[dict[str, Any]]:
+        collected: list[dict[str, Any]] = []
+        stack = list(child_map.get(root_key, []))
+        while stack:
+            node = stack.pop()
+            collected.append(node)
+            stack.extend(child_map.get(str(node.get("node_key", "")), []))
+        return collected
+
+    column_gap = 24.0
+    cursor_x = 40.0
+    target_y = 64.0
+
+    for root in top_level_rows:
+        group_nodes = [root] + descendants(str(root.get("node_key", "")))
+        left = min(float(item["x"]) for item in group_nodes)
+        top = min(float(item["y"]) for item in group_nodes)
+        right = max(float(item["x"]) + float(item["width"]) for item in group_nodes)
+        bottom = max(float(item["y"]) + float(item["height"]) for item in group_nodes)
+        group_width = right - left
+
+        dx = cursor_x - left
+        dy = target_y - top
+        for item in group_nodes:
+            item["x"] = float(item["x"]) + dx
+            item["y"] = float(item["y"]) + dy
+
+        cursor_x += max(group_width, 360.0) + column_gap
 
 
 def build_graphics_model(sysml_code: str) -> dict[str, Any]:

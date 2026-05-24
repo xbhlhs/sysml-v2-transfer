@@ -28,6 +28,21 @@ def test_cli_code_to_graphics_writes_svg(tmp_path) -> None:
     assert "Example" in svg
 
 
+def test_cli_code_to_graphics_uses_def_view_default_output(tmp_path) -> None:
+    input_file = tmp_path / "pla.sysml"
+    input_file.write_text("package Example {}\npart def A {}", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["code-to-graphics", str(input_file)])
+
+    assert result.exit_code == 0
+    output_file = tmp_path / "pla-def-view.svg"
+    assert output_file.exists()
+    svg = output_file.read_text(encoding="utf-8")
+    assert "<svg" in svg
+    assert "Example" in svg
+
+
 def test_cli_code_to_graphics_raw_text(tmp_path) -> None:
     output_file = tmp_path / "diagram.svg"
 
